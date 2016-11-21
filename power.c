@@ -49,14 +49,13 @@ ISR (INT0_vect)
 
         printf("\nTime since boot %ld", begin_timer2);
         active_time = (begin_timer2 - sleeping);
-
+        float duty_cicle = (active_time/begin_timer2)*100;
         printf("\nActive time %ld", active_time);
-
-        float duty_cicle = (active_time/begin_timer2) * 100 ;
-        printf("\nEstimated duty cicle %ld", duty_cicle);
+        printf("\nEstimated duty cicle %ld XXX", duty_cicle);
+        delay(200);
         pressed = 1;
     }
-    delay(30);
+
     last_interruption = millis();
 }
 
@@ -83,26 +82,24 @@ void timer2_init()
 
 ISR (TIMER2_COMPA_vect)
 {
-//#ifdef DEBUG_TIMER1
-    //printf("TIMER2 \n");
-//#endif
+    TCNT2 = 0;
     t2_counter = t2_counter + 16;
 }
 
 void set_sleep_mode(char mode) {
     switch (mode) {
-        case IDLE_MODE:
+      case IDLE_MODE:
             SMCR &= ~(1 << SM0);
             SMCR &= ~(1 << SM1);
             SMCR &= ~(1 << SM2);
-	    break;
-	case POWER_DOWN_MODE:
+	          break;
+      case POWER_DOWN_MODE:
             SMCR &= ~(1 << SM0);
             SMCR |= (1<<SM1);
-	    break;
-	case POWER_SAVE_MODE:
+	          break;
+	    case POWER_SAVE_MODE:
             SMCR |= (1<<SM1) | (1<<SM0);
-	    break;
+	          break;
 	case STANDBY_MODE:
             SMCR &= ~(1 << SM0);
             SMCR |= (1<<SM2) | (1<<SM1);
@@ -125,14 +122,14 @@ void sleep_cpu() {
 
 int main (void)
 {
+    timer2_init();
+
     // Initialize UART
     uart_init();
     stdout = &uart_output;
     stdin  = &uart_input;
 
     buttons_init();
-
-    timer2_init();
 
     //Enable global interruptions
     sei();
