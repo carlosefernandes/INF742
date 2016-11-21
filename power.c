@@ -19,6 +19,8 @@ volatile long last_interruption = 0;
 volatile long begining_sleep = 0;
 volatile long sleeping = 0;
 
+volatile int pressed = 1;
+
 long millis() {
     //printf("TCNT2 %d counter %ld \n", TCNT2, t2_counter);
     return t2_counter + ((TCNT2 * 16) / 250) ;
@@ -40,14 +42,21 @@ void buttons_init() {
 ISR (INT0_vect)
 {
   long begin_timer2 = millis();
+
   if ((begin_timer2 - last_interruption) >= 200) {
-        printf("Time since boot %ld \n", begin_timer2);
-        active_time = begin_timer2 + (begin_timer2 - begining_sleep);
-        printf("beging %ld  begining_sleep %ld active_time %ld TCNT2 %d \n", begin_timer2, begining_sleep, active_time, TCNT2);
-        long duty_cicle = (float)(active_time / begin_timer2) * 100 ;
-        printf("Estimated duty cicle %ld \n", duty_cicle);
-        delay(20);
+
+        sleeping += (begin_timer2 - begining_sleep);
+
+        printf("\nTime since boot %ld", begin_timer2);
+        active_time = (begin_timer2 - sleeping);
+
+        printf("\nActive time %ld", active_time);
+
+        float duty_cicle = (active_time/begin_timer2) * 100 ;
+        printf("\nEstimated duty cicle %ld", duty_cicle);
+        pressed = 1;
     }
+    delay(30);
     last_interruption = millis();
 }
 
@@ -58,7 +67,7 @@ void timer2_init()
 #endif
 
     // set up timer with prescaler = 1024 and CTC mode
-    TCCR2B = /*(1 << WGM12) |*/ (1<<CS22) | (1<<CS21) | (1<<CS20);
+    TCCR2B = (1 << WGM12) | (1<<CS22) | (1<<CS21) | (1<<CS20);
 
     // initialize counter
     TCNT2 = 0;
@@ -78,7 +87,6 @@ ISR (TIMER2_COMPA_vect)
     //printf("TIMER2 \n");
 //#endif
     t2_counter = t2_counter + 16;
-    sleeping += 16;
 }
 
 void set_sleep_mode(char mode) {
@@ -106,9 +114,11 @@ void set_sleep_mode(char mode) {
 }
 
 void sleep_cpu() {
-    begining_sleep = millis();
+    if (pressed) {
+        begining_sleep = millis();
+        pressed = 0;
+    }
     TCNT2 = 0;
-    sleeping = 0;
     asm("sleep");     // Make processor sleep
     SMCR |= (1 << SE); // Enable sleep mode
 }
@@ -128,7 +138,7 @@ int main (void)
     sei();
 
     while (1) {
-        //printf("While\n");
+        //printf("T"); delay(5);
         set_sleep_mode(POWER_SAVE_MODE);
  	      sleep_cpu();
     }
