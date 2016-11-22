@@ -18,6 +18,7 @@ volatile long active_time = 0;
 volatile long last_interruption = 0;
 volatile long begining_sleep = 0;
 volatile long sleeping = 0;
+volatile long begin_delay = 0;
 
 volatile int pressed = 1;
 
@@ -27,14 +28,14 @@ long millis() {
 }
 
 void delay(int amount) {
-    long begin_delay = millis();
-    while((amount + begin_delay) < millis());
+    begin_delay = millis();
+    //while((amount + begin_delay) < millis());
 }
 
 void buttons_init() {
     // Setup button 1
     *DDRd = ~(1 << DDD2);           // pin2 as input
-    EICRA |= (1 << ISC00);         // set INT0 to trigger on ANY logic change
+    EICRA |= (1 << ISC01) || (1 << ISC00);         // set INT0 to trigger on ANY logic change
     EIMSK |= (1 << INT0);          // Turns on INT0
 
 }
@@ -42,21 +43,20 @@ void buttons_init() {
 ISR (INT0_vect)
 {
   long begin_timer2 = millis();
+  if (begining_sleep > 0) {
+	   sleeping += (begin_timer2 - begining_sleep);
+     //printf("\nsleep time %ld begining_sleep %ld", sleeping, begining_sleep);
+  }
+  begining_sleep = 0;
 
-  if ((begin_timer2 - last_interruption) >= 200) {
-
-        sleeping += (begin_timer2 - begining_sleep);
-
+  if (begin_delay == 0) {
         printf("\nTime since boot %ld", begin_timer2);
         active_time = (begin_timer2 - sleeping);
-        float duty_cicle = (active_time/begin_timer2)*100;
+        unsigned long  duty_cicle = (active_time*100)/begin_timer2;
         printf("\nActive time %ld", active_time);
-        printf("\nEstimated duty cicle %ld XXX", duty_cicle);
-        delay(200);
-        pressed = 1;
+        printf("\nEstimated duty cicle %d%% .", duty_cicle);
+        delay(30);
     }
-
-    last_interruption = millis();
 }
 
 void timer2_init()
@@ -82,8 +82,36 @@ void timer2_init()
 
 ISR (TIMER2_COMPA_vect)
 {
-    TCNT2 = 0;
+
     t2_counter = t2_counter + 16;
+    long delay = t2_counter + ((TCNT2 * 16)/250);
+    // begining_sleep > 0 means that processor is waking
+    if (begining_sleep > 0) {
+		    sleeping += (delay - begining_sleep);
+        //printf ("\n timer2 - sleeping %ld ", sleeping);
+	  }
+	  begining_sleep = 0;
+
+    //printf("\ndelay %ld begin_delay %ld", delay, begin_delay);
+    if (delay > (begin_delay + 100)) {
+       begin_delay = 0;
+    }
+}
+
+void sleep_cpu() {
+  //printf ("\n sleep begin_delay %ld begining_sleep %ld", begin_delay, begining_sleep);
+  // Do not sleep if handling debounce
+  if (begin_delay == 0) {
+      // begining_sleep == 0 means that timer2 and button interruptions were
+      // were handled and processor can sleep
+      if (begining_sleep == 0) {
+	       begining_sleep = millis();
+         //printf ("\n sleep %ld", begining_sleep);
+       }
+
+      SMCR |= (1 << SE); // Enable sleep mode
+      asm("sleep");     // Make processor sleep
+  }
 }
 
 void set_sleep_mode(char mode) {
@@ -110,16 +138,6 @@ void set_sleep_mode(char mode) {
     }
 }
 
-void sleep_cpu() {
-    if (pressed) {
-        begining_sleep = millis();
-        pressed = 0;
-    }
-    TCNT2 = 0;
-    asm("sleep");     // Make processor sleep
-    SMCR |= (1 << SE); // Enable sleep mode
-}
-
 int main (void)
 {
     timer2_init();
@@ -135,7 +153,7 @@ int main (void)
     sei();
 
     while (1) {
-        //printf("T"); delay(5);
+		    //printf ("\n while");
         set_sleep_mode(POWER_SAVE_MODE);
  	      sleep_cpu();
     }
